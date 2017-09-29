@@ -1,0 +1,35 @@
+{
+  "name": "lint-blame",
+  "version": "0.0.1",
+  "description": "Blames your lint complaints to enable incremental adoption of new lint rules",
+  "bin": "bin.js",
+  "main": "lib/lint-blame.js",
+  "types": "lib/lint-blame.d.ts",
+  "engines": {
+    "node": ">=6"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/felixfbecker/lint-blame"
+  },
+  "scripts": {
+    "build": "tsc -p .",
+    "watch": "tsc -p . -w",
+    "lint": "tslint -c tslint.json -p ."
+  },
+  "author": "Felix Becker <felix.b@outlook.com>",
+  "license": "MIT",
+  "devDependencies": {
+    "@sourcegraph/tsconfig": "^1.0.1",
+    "@sourcegraph/tslint-config": "^2.0.2",
+    "@types/node": "^8.0.31",
+    "@types/yargs": "^8.0.2",
+    "tslint": "^5.7.0",
+    "tslint-language-service": "^0.9.6",
+    "typescript": "^2.5.2"
+  },
+  "dependencies": {
+    "rxjs": "^5.4.3",
+    "yargs": "^9.0.1"
+  }
+}

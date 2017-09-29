@@ -1,0 +1,23 @@
+{
+  "extends": "./node_modules/@sourcegraph/tsconfig/tsconfig.json",
+  "compilerOptions": {
+    "outDir": "lib",
+    "target": "es5",
+    "module": "commonjs",
+    "moduleResolution": "node",
+    "lib": [
+      "es2015"
+    ],
+    "declaration": true,
+    "skipLibCheck": true,
+    "sourceMap": true,
+    "plugins": [
+      {
+        "name": "tslint-language-service"
+      }
+    ]
+  },
+  "include": [
+    "src/**/*.ts"
+  ]
+}
