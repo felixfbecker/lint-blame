@@ -1,41 +1,150 @@
 import { spawn } from 'child_process'
 import { Observable } from 'rxjs'
 
-export interface Blame {
-    author: string | null
-    authorMail: string | null
-    authorTime: number | null
+export interface CommitInfo {
+    author?: string
+    authorMail?: string
+    authorTime?: number
+    authorTz?: string
+    committer?: string
+    committerMail?: string
+    committerTime?: number
+    committerTz?: string
+    summary?: string
+    previousHash?: string
+    filename?: string
 }
 
-type BlamedLines = Map<number, Blame>
+export interface LineInfo {
+    code: string
+    hash: string
+    originalLine: number
+    finalLine: number
+    numLines: number
+    commit: CommitInfo
+}
 
-/**
- * Parses the result of a `git blame --porcelain`
- * Returns a Map from line number to parsed blame for that line.
- * Every line of the file will be present.
- */
-function parseBlameOutput(output: string): BlamedLines {
-    // the --porcelain format prints at least one header line per source line,
-    // then the source line prefixed by a tab character
-    const blames = output.trim().split(/^\t.*\n/m)
-    const parsedBlames = new Map<number, Blame>()
-    for (const blame of blames) {
-        // https://git-scm.com/docs/git-blame#_the_porcelain_format
-        // commit-hash original-line final-line group-length
-        const lineMatch = blame.match(/^\w{40} \d+ (\d+)/)
-        if (!lineMatch) {
-            throw new Error(`Invalid blame input ${blame}`)
+interface BlamedLines {
+    [line: number]: LineInfo
+}
+
+class BlameParser {
+
+    public commitData: { [sha1: string]: CommitInfo } = {}
+    public lineData: BlamedLines = {}
+
+    private settingCommitData = false
+    private currentCommitHash = ''
+    private currentLineNumber = 1
+
+    public parse(blame: string): void {
+
+        // Split up the original document into an array of lines
+        const lines = blame.split('\n')
+
+        // Go through each line
+        // tslint:disable-next-line:prefer-for-of
+        for (const line of lines) {
+
+            // If we detect a tab character we know it's a line of code
+            // So we can reset stateful variables
+            if (line[0] === '\t') {
+                // The first tab is an addition made by git, so get rid of it
+                this.lineData[this.currentLineNumber].code = line.substr(1)
+                this.settingCommitData = false
+                this.currentCommitHash = ''
+            } else {
+                // If we are in the process of collecting data about a commit summary
+                if (this.settingCommitData) {
+                    this.parseCommitLine(line)
+                } else {
+                    const [sha1, originalLineStr, finalLineStr, numLinesStr] = line.split(' ')
+
+                    this.currentCommitHash = sha1
+                    this.currentLineNumber = ~~finalLineStr
+
+                    // Since the commit data (author, committer, summary, etc) only
+                    // appear once in a porcelain output for every commit, we set
+                    // it up once here and then expect that the next 8-11 lines of
+                    // the file are dedicated to that data
+                    if (!this.commitData[sha1]) {
+                        this.settingCommitData = true
+                        this.commitData[sha1] = {}
+                    }
+
+                    // Setup the new lineData hash
+                    this.lineData[this.currentLineNumber] = {
+                        code: '',
+                        hash: this.currentCommitHash,
+                        originalLine: ~~originalLineStr,
+                        finalLine: ~~finalLineStr,
+                        numLines: numLinesStr ? ~~numLinesStr : -1,
+                        commit: this.commitData[sha1]
+                    }
+                }
+            }
         }
-        const authorMail = blame.match(/^author-mail <(.+)>$/m)
-        const author = blame.match(/^author (.+)$/m)
-        const authorTime = blame.match(/^author-time (\d+)$/m)
-        parsedBlames.set(~~lineMatch[1], {
-            author: author && author[1],
-            authorMail: authorMail && authorMail[1],
-            authorTime: authorTime && parseInt(authorTime[1], 10)
-        })
     }
-    return parsedBlames
+
+    /**
+     * Parses and sets data from a line following a commit header
+     *
+     * @param {array} lineArr The current line split by a space
+     */
+    public parseCommitLine(line: string): void {
+
+        const currentCommitData = this.commitData[this.currentCommitHash]
+
+        const spaceIndex = line.indexOf(' ')
+        const key = line.slice(0, spaceIndex)
+        const value = line.slice(spaceIndex + 1)
+
+        switch (key) {
+            case 'author':
+                currentCommitData.author = value
+                break
+
+            case 'author-mail':
+                currentCommitData.authorMail = value
+                break
+
+            case 'author-time':
+                currentCommitData.authorTime = ~~value
+                break
+
+            case 'author-tz':
+                currentCommitData.authorTz = value
+                break
+
+            case 'committer':
+                currentCommitData.committer = value
+                break
+
+            case 'committer-mail':
+                currentCommitData.committerMail = value
+                break
+
+            case 'committer-time':
+                currentCommitData.committerTime = ~~value
+                break
+
+            case 'committer-tz':
+                currentCommitData.committerTz = value
+                break
+
+            case 'summary':
+                currentCommitData.summary = value
+                break
+
+            case 'filename':
+                currentCommitData.filename = value
+                break
+
+            case 'previous':
+                currentCommitData.previousHash = value
+                break
+        }
+    }
 }
 
 export class Blamer {
@@ -43,7 +152,7 @@ export class Blamer {
     /** Map from absolute file path to blame result */
     private blames = new Map<string, Observable<BlamedLines>>()
 
-    public blame(file: string, line: number): Observable<Blame> {
+    public blame(file: string, line: number): Observable<CommitInfo> {
         let blamesObservable = this.blames.get(file)
         if (!blamesObservable) {
             blamesObservable = this.blameFile(file)
@@ -51,26 +160,26 @@ export class Blamer {
         }
         return blamesObservable
             .map(blames => {
-                const blame = blames.get(line)
+                const blame = blames[line]
                 if (!blame) {
                     throw new Error(`Line ${line} does not exist in file ${file}`)
                 }
-                return blame
+                return blame.commit
             })
     }
 
     private blameFile(file: string): Observable<BlamedLines> {
         const obs = new Observable<Buffer>(observer => {
-            console.log(`Blaming ${file}`)
-            // TODO use --porcelain
-            const cp = spawn('git', ['blame', '--line-porcelain', file])
+            const cp = spawn('git', ['blame', '--porcelain', file])
+            let stderr = ''
             cp.stdout.on('data', (chunk: Buffer) => observer.next(chunk))
+            cp.stderr.on('data', (chunk: Buffer) => stderr += chunk)
             cp.on('error', err => observer.error(err))
             cp.on('exit', (exitCode: number) => {
                 if (!exitCode) {
                     observer.complete()
                 } else {
-                    observer.error(new Error(`git blame ${file} exited with ${exitCode}`))
+                    observer.error(new Error(`git blame ${file} exited with ${exitCode} ${stderr}`))
                 }
             })
             return () => cp.kill()
@@ -91,7 +200,11 @@ export class Blamer {
                     })
             )
             .reduce((buffer, chunk) => buffer + chunk, '')
-            .map(parseBlameOutput)
+            .map(output => {
+                const blameParser = new BlameParser()
+                blameParser.parse(output)
+                return blameParser.lineData
+            })
             .do(undefined as any, err => {
                 this.blames.delete(file)
             })
