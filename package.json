@@ -1,6 +1,6 @@
 {
   "name": "lint-blame",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "Blames your lint complaints to enable incremental adoption of new lint rules",
   "bin": "bin.js",
   "main": "lib/lint-blame.js",
