@@ -170,6 +170,7 @@ export class Blamer {
 
     private blameFile(file: string): Observable<BlamedLines> {
         const obs = new Observable<Buffer>(observer => {
+            let stderr = ''
             const child = spawn('git', ['blame', '--porcelain', file])
             child.on('error', err => observer.error(err))
             child.on('exit', (exitCode: number) => {
@@ -179,7 +180,6 @@ export class Blamer {
                     observer.error(new Error(`git blame ${file} exited with ${exitCode} ${stderr}`))
                 }
             })
-            let stderr = ''
             if (child.stdout) {
                 child.stdout.on('data', (chunk: Buffer) => observer.next(chunk))
             }
