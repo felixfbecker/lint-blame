@@ -3,7 +3,7 @@ import { Observable } from 'rxjs'
 import * as yargs from 'yargs'
 import { parsers } from './complaints'
 import { Blamer } from './git'
-import { filterComplaintsByBlame, Member } from './lint-blame'
+import { checkBlame, Member } from './lint-blame'
 
 interface Arguments extends yargs.Arguments {
     file: string
@@ -70,15 +70,18 @@ const subscription = Observable.fromEvent<Buffer>(process.stdin, 'data')
     .map(buffer => buffer.toString())
     .let(splitBy('\n'))
     .mergeMap(line =>
-        // TODO allow to specify the input format (e.g. tsconfig, tslint, ...)
         Observable.defer(() => Observable.of(parseComplaint(line)))
             // Ignore lines that are not complaints (e.g. warnings)
             .catch(err => [])
-            .let(filterComplaintsByBlame(blamer, argv))
+            .mergeMap(complaint =>
+                blamer.blame(complaint.filePath, complaint.line)
+                    .mergeMap(blame => checkBlame(blame, argv)
+                        ? [`${blame.sha1.slice(0, 7)} ${blame.author} ${blame.authorTime && blame.authorTime.toLocaleString()} ${line}`]
+                        : []
+                    )
+            , 20)
             // Remember if we had at least one complaint
             .do(() => complaints = true)
-            // Pass line through (instead of parsed complaint object)
-            .mapTo(line)
     )
     .concat([''])
     .subscribe(

@@ -2,13 +2,14 @@ import { spawn } from 'child_process'
 import { Observable } from 'rxjs'
 
 export interface CommitInfo {
+    sha1: string
     author?: string
     authorMail?: string
-    authorTime?: number
+    authorTime?: Date
     authorTz?: string
     committer?: string
     committerMail?: string
-    committerTime?: number
+    committerTime?: Date
     committerTz?: string
     summary?: string
     previousHash?: string
@@ -17,7 +18,6 @@ export interface CommitInfo {
 
 export interface LineInfo {
     code: string
-    hash: string
     originalLine: number
     finalLine: number
     numLines: number
@@ -69,13 +69,12 @@ class BlameParser {
                     // the file are dedicated to that data
                     if (!this.commitData[sha1]) {
                         this.settingCommitData = true
-                        this.commitData[sha1] = {}
+                        this.commitData[sha1] = { sha1 }
                     }
 
                     // Setup the new lineData hash
                     this.lineData[this.currentLineNumber] = {
                         code: '',
-                        hash: this.currentCommitHash,
                         originalLine: ~~originalLineStr,
                         finalLine: ~~finalLineStr,
                         numLines: numLinesStr ? ~~numLinesStr : -1,
@@ -109,7 +108,7 @@ class BlameParser {
                 break
 
             case 'author-time':
-                currentCommitData.authorTime = ~~value
+                currentCommitData.authorTime = new Date(~~value * 1000)
                 break
 
             case 'author-tz':
@@ -125,7 +124,7 @@ class BlameParser {
                 break
 
             case 'committer-time':
-                currentCommitData.committerTime = ~~value
+                currentCommitData.committerTime = new Date(~~value * 1000)
                 break
 
             case 'committer-tz':
@@ -159,30 +158,35 @@ export class Blamer {
             this.blames.set(file, blamesObservable)
         }
         return blamesObservable
-            .map(blames => {
+            .mergeMap(blames => {
                 const blame = blames[line]
                 if (!blame) {
-                    throw new Error(`Line ${line} does not exist in file ${file}`)
+                    // Linters can report an error on the line that contains EOL, but git blame can't blame it
+                    return []
                 }
-                return blame.commit
+                return [blame.commit]
             })
     }
 
     private blameFile(file: string): Observable<BlamedLines> {
         const obs = new Observable<Buffer>(observer => {
-            const cp = spawn('git', ['blame', '--porcelain', file])
-            let stderr = ''
-            cp.stdout.on('data', (chunk: Buffer) => observer.next(chunk))
-            cp.stderr.on('data', (chunk: Buffer) => stderr += chunk)
-            cp.on('error', err => observer.error(err))
-            cp.on('exit', (exitCode: number) => {
+            const child = spawn('git', ['blame', '--porcelain', file])
+            child.on('error', err => observer.error(err))
+            child.on('exit', (exitCode: number) => {
                 if (!exitCode) {
                     observer.complete()
                 } else {
                     observer.error(new Error(`git blame ${file} exited with ${exitCode} ${stderr}`))
                 }
             })
-            return () => cp.kill()
+            let stderr = ''
+            if (child.stdout) {
+                child.stdout.on('data', (chunk: Buffer) => observer.next(chunk))
+            }
+            if (child.stderr) {
+                child.stderr.on('data', (chunk: Buffer) => stderr += chunk)
+            }
+            return () => child.kill()
         })
             .retryWhen(errors =>
                 errors
