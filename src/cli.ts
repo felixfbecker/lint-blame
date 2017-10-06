@@ -66,7 +66,11 @@ const blamer = new Blamer()
 let complaints = false
 
 // Read lines from STDIN
-const subscription = Observable.fromEvent<Buffer>(process.stdin, 'data')
+const subscription = Observable.merge(
+    Observable.fromEvent<Buffer>(process.stdin, 'data'),
+    Observable.fromEvent<any>(process.stdin, 'error').mergeMap(err => Observable.throw(err))
+)
+    .takeUntil(Observable.fromEvent<void>(process.stdin, 'end'))
     .map(buffer => buffer.toString())
     .let(splitBy('\n'))
     .mergeMap(line =>
@@ -83,7 +87,6 @@ const subscription = Observable.fromEvent<Buffer>(process.stdin, 'data')
             // Remember if we had at least one complaint
             .do(() => complaints = true)
     , 20)
-    .concat([''])
     .subscribe(
         line => {
             process.stdout.write(line + '\n')
