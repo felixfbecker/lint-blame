@@ -196,7 +196,6 @@ export class Blamer {
                         }
                     })
                     .delay(500)
-                    .take(10)
                     .map((err, i) => {
                         if (i === 10) {
                             throw err
