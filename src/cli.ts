@@ -82,7 +82,7 @@ const subscription = Observable.fromEvent<Buffer>(process.stdin, 'data')
             , 20)
             // Remember if we had at least one complaint
             .do(() => complaints = true)
-    )
+    , 20)
     .concat([''])
     .subscribe(
         line => {
