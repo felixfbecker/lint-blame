@@ -26,6 +26,6 @@ export const checkBlame = (blame: CommitInfo, { members, since }: FilterOptions 
     ) && (
         !since
         || !blame.authorTime
-        || blame.authorTime.getTime() < since.getTime()
+        || blame.authorTime.getTime() > since.getTime()
     )
 )
