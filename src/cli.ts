@@ -63,7 +63,8 @@ if (!parseComplaint) {
 
 const blamer = new Blamer()
 
-let complaints = false
+let totalComplaints = 0
+let validComplaints = 0
 
 // Read lines from STDIN
 const subscription = Observable.merge(
@@ -77,6 +78,7 @@ const subscription = Observable.merge(
         Observable.defer(() => Observable.of(parseComplaint(line)))
             // Ignore lines that are not complaints (e.g. warnings)
             .catch(err => [])
+            .do(() => totalComplaints++)
             .mergeMap(complaint =>
                 blamer.blame(complaint.filePath, complaint.line)
                     .mergeMap(blame => checkBlame(blame, argv)
@@ -84,8 +86,7 @@ const subscription = Observable.merge(
                         : []
                     )
             , 20)
-            // Remember if we had at least one complaint
-            .do(() => complaints = true)
+            .do(() => validComplaints++)
     , 20)
     .subscribe(
         line => {
@@ -96,7 +97,8 @@ const subscription = Observable.merge(
             process.exit(2)
         },
         () => {
-            process.exit(Number(complaints))
+            process.stdout.write(`\n${validComplaints} complaints (${totalComplaints} total, ${totalComplaints - validComplaints} ignored)\n`)
+            process.exit(validComplaints > 0 ? 1 : 0)
         }
     )
 
