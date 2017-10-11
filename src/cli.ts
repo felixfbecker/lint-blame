@@ -2,7 +2,7 @@
 import { Observable } from 'rxjs'
 import * as yargs from 'yargs'
 import { parsers } from './complaints'
-import { Blamer } from './git'
+import { Blamer, CommitInfo } from './git'
 import { checkBlame, Member } from './lint-blame'
 
 interface Arguments extends yargs.Arguments {
@@ -61,7 +61,16 @@ if (!parseComplaint) {
     throw new Error(`Unknown complaint format: ${argv.format}`)
 }
 
-const blamer = new Blamer()
+const formatBlame = (blame: CommitInfo | null): string => {
+    if (!blame) {
+        return 'Not Committed Yet'
+    }
+    const author = blame.author || 'No Author'
+    const date = blame.authorTime && blame.authorTime.toLocaleString() || 'No Author Date'
+    return `${blame.sha1.slice(0, 7)} ${author} ${date}`
+}
+
+const blamer = new Blamer(50)
 
 let totalComplaints = 0
 let validComplaints = 0
@@ -80,14 +89,14 @@ const subscription = Observable.merge(
             .catch(err => [])
             .do(() => totalComplaints++)
             .mergeMap(complaint =>
-                blamer.blame(complaint.filePath, complaint.line)
-                    .mergeMap(blame => checkBlame(blame, argv)
-                        ? [`${blame.sha1.slice(0, 7)} ${blame.author} ${blame.authorTime && blame.authorTime.toLocaleString()} ${line}`]
+                blamer.blameLine(complaint.filePath, complaint.line)
+                    .mergeMap(blame => !blame || checkBlame(blame, argv)
+                        ? [`${formatBlame(blame)} ${line}`]
                         : []
                     )
-            , 20)
+            )
             .do(() => validComplaints++)
-    , 20)
+    )
     .subscribe(
         line => {
             process.stdout.write(line + '\n')

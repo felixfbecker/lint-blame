@@ -1,5 +1,6 @@
 import { spawn } from 'child_process'
 import { Observable } from 'rxjs'
+import Semaphore from 'semaphore-async-await'
 
 export interface CommitInfo {
     sha1: string
@@ -21,12 +22,41 @@ export interface LineInfo {
     originalLine: number
     finalLine: number
     numLines: number
-    commit: CommitInfo
+    commit: CommitInfo | null
 }
 
 interface BlamedLines {
-    [line: number]: LineInfo
+    [line: number]: LineInfo | null
 }
+
+/**
+ * Parses and sets data from a line following a commit header
+ *
+ * @param {array} lineArr The current line split by a space
+ */
+function parseCommitLine(line: string): Partial<CommitInfo> {
+
+    const spaceIndex = line.indexOf(' ')
+    const key = line.slice(0, spaceIndex)
+    const value = line.slice(spaceIndex + 1)
+
+    switch (key) {
+        case 'author':          return { author: value }
+        case 'author-mail':     return { authorMail: value }
+        case 'author-time':     return { authorTime: new Date(~~value * 1000) }
+        case 'author-tz':       return { authorTz: value }
+        case 'committer':       return { committer: value }
+        case 'committer-mail':  return { committerMail: value }
+        case 'committer-time':  return { committerTime: new Date(~~value * 1000) }
+        case 'committer-tz':    return { committerTz: value }
+        case 'summary':         return { summary: value }
+        case 'filename':        return { filename: value }
+        case 'previous':        return { previousHash: value }
+    }
+    return {}
+}
+
+const NOT_COMMITED_YET_SHA1 = '0'.repeat(40)
 
 class BlameParser {
 
@@ -34,7 +64,7 @@ class BlameParser {
     public lineData: BlamedLines = {}
 
     private settingCommitData = false
-    private currentCommitHash = ''
+    private currentCommitHash?: string
     private currentLineNumber = 1
 
     public parse(blame: string): void {
@@ -43,24 +73,27 @@ class BlameParser {
         const lines = blame.split('\n')
 
         // Go through each line
-        // tslint:disable-next-line:prefer-for-of
         for (const line of lines) {
 
             // If we detect a tab character we know it's a line of code
             // So we can reset stateful variables
             if (line[0] === '\t') {
                 // The first tab is an addition made by git, so get rid of it
-                this.lineData[this.currentLineNumber].code = line.substr(1)
+                this.lineData[this.currentLineNumber]!.code = line.substr(1)
                 this.settingCommitData = false
-                this.currentCommitHash = ''
+                this.currentCommitHash = undefined
             } else {
                 // If we are in the process of collecting data about a commit summary
                 if (this.settingCommitData) {
-                    this.parseCommitLine(line)
+                    if (this.currentCommitHash) {
+                        Object.assign(this.commitData[this.currentCommitHash], parseCommitLine(line))
+                    }
                 } else {
                     const [sha1, originalLineStr, finalLineStr, numLinesStr] = line.split(' ')
 
-                    this.currentCommitHash = sha1
+                    if (sha1 !== NOT_COMMITED_YET_SHA1) {
+                        this.currentCommitHash = sha1
+                    }
                     this.currentLineNumber = ~~finalLineStr
 
                     // Since the commit data (author, committer, summary, etc) only
@@ -69,7 +102,9 @@ class BlameParser {
                     // the file are dedicated to that data
                     if (!this.commitData[sha1]) {
                         this.settingCommitData = true
-                        this.commitData[sha1] = { sha1 }
+                        if (sha1 !== NOT_COMMITED_YET_SHA1) {
+                            this.commitData[sha1] = { sha1 }
+                        }
                     }
 
                     // Setup the new lineData hash
@@ -78,88 +113,29 @@ class BlameParser {
                         originalLine: ~~originalLineStr,
                         finalLine: ~~finalLineStr,
                         numLines: numLinesStr ? ~~numLinesStr : -1,
-                        commit: this.commitData[sha1]
+                        commit: sha1 !== NOT_COMMITED_YET_SHA1 ? this.commitData[sha1] : null
                     }
                 }
             }
-        }
-    }
-
-    /**
-     * Parses and sets data from a line following a commit header
-     *
-     * @param {array} lineArr The current line split by a space
-     */
-    public parseCommitLine(line: string): void {
-
-        const currentCommitData = this.commitData[this.currentCommitHash]
-
-        const spaceIndex = line.indexOf(' ')
-        const key = line.slice(0, spaceIndex)
-        const value = line.slice(spaceIndex + 1)
-
-        switch (key) {
-            case 'author':
-                currentCommitData.author = value
-                break
-
-            case 'author-mail':
-                currentCommitData.authorMail = value
-                break
-
-            case 'author-time':
-                currentCommitData.authorTime = new Date(~~value * 1000)
-                break
-
-            case 'author-tz':
-                currentCommitData.authorTz = value
-                break
-
-            case 'committer':
-                currentCommitData.committer = value
-                break
-
-            case 'committer-mail':
-                currentCommitData.committerMail = value
-                break
-
-            case 'committer-time':
-                currentCommitData.committerTime = new Date(~~value * 1000)
-                break
-
-            case 'committer-tz':
-                currentCommitData.committerTz = value
-                break
-
-            case 'summary':
-                currentCommitData.summary = value
-                break
-
-            case 'filename':
-                currentCommitData.filename = value
-                break
-
-            case 'previous':
-                currentCommitData.previousHash = value
-                break
         }
     }
 }
 
 export class Blamer {
 
-    /** Map from absolute file path to blame result */
-    private blames = new Map<string, Observable<BlamedLines>>()
+    private concurrencyLimit: Semaphore
 
-    public blame(file: string, line: number): Observable<CommitInfo> {
-        let blamesObservable = this.blames.get(file)
-        if (!blamesObservable) {
-            blamesObservable = this.blameFile(file)
-            this.blames.set(file, blamesObservable)
-        }
-        return blamesObservable
+    /** Map from absolute file path to pending blame result */
+    private blames = new Map<string, Observable<BlamedLines | null>>()
+
+    constructor(concurrencyLimit: number) {
+        this.concurrencyLimit = new Semaphore(concurrencyLimit)
+    }
+
+    public blameLine(file: string, line: number): Observable<CommitInfo | null> {
+        return this.memoizedBlameFile(file)
             .mergeMap(blames => {
-                const blame = blames[line]
+                const blame = blames && blames[line]
                 if (!blame) {
                     // Linters can report an error on the line that contains EOL, but git blame can't blame it
                     return []
@@ -168,52 +144,49 @@ export class Blamer {
             })
     }
 
-    private blameFile(file: string): Observable<BlamedLines> {
-        const obs = new Observable<Buffer>(observer => {
-            let stderr = ''
-            const child = spawn('git', ['blame', '--porcelain', file])
-            child.on('error', err => observer.error(err))
-            child.on('exit', (exitCode: number) => {
-                if (!exitCode) {
-                    observer.complete()
-                } else {
-                    observer.error(new Error(`git blame ${file} exited with ${exitCode} ${stderr}`))
+    private memoizedBlameFile(file: string): Observable<BlamedLines | null> {
+        let observable = this.blames.get(file)
+        if (!observable) {
+            observable = this.blameFile(file).publishReplay().refCount()
+            this.blames.set(file, observable)
+        }
+        return observable
+    }
+
+    private blameFile(file: string): Observable<BlamedLines | null> {
+        return Observable.defer(() => this.concurrencyLimit.wait())
+            .mergeMap(() => new Observable<Buffer>(observer => {
+                let stderr = ''
+                const child = spawn('git', ['blame', '--porcelain', file])
+                child.on('error', err => observer.error(err))
+                child.on('close', (exitCode: number) => {
+                    this.concurrencyLimit.signal()
+                    if (!exitCode) {
+                        observer.complete()
+                    } else {
+                        observer.error(Object.assign(new Error(`git blame ${file} exited with ${exitCode} ${stderr}`), { exitCode, stderr }))
+                    }
+                })
+                if (child.stdout) {
+                    child.stdout.on('data', (chunk: Buffer) => observer.next(chunk))
                 }
-            })
-            if (child.stdout) {
-                child.stdout.on('data', (chunk: Buffer) => observer.next(chunk))
-            }
-            if (child.stderr) {
-                child.stderr.on('data', (chunk: Buffer) => stderr += chunk)
-            }
-            return () => child.kill()
-        })
-            .retryWhen(errors =>
-                errors
-                    .do(err => {
-                        if (err.code !== 'EAGAIN') {
-                            throw err
-                        }
-                    })
-                    .delay(500)
-                    .map((err, i) => {
-                        if (i === 10) {
-                            throw err
-                        }
-                    })
-            )
+                if (child.stderr) {
+                    child.stderr.on('data', (chunk: Buffer) => stderr += chunk)
+                }
+                return () => child.kill()
+            }))
             .reduce((buffer, chunk) => buffer + chunk, '')
             .map(output => {
                 const blameParser = new BlameParser()
                 blameParser.parse(output)
                 return blameParser.lineData
             })
-            .do(undefined as any, err => {
-                this.blames.delete(file)
+            .catch(err => {
+                // If the path is not known to git, the file is not committed yet
+                if (err.stderr && err.stderr.includes('no such path')) {
+                    return [null]
+                }
+                throw err
             })
-            .publishReplay()
-            .refCount()
-        this.blames.set(file, obs)
-        return obs
     }
 }
