@@ -1,6 +1,8 @@
 
 # lint-blame
 
+[![Greenkeeper badge](https://badges.greenkeeper.io/felixfbecker/lint-blame.svg)](https://greenkeeper.io/)
+
 [![Version](https://img.shields.io/npm/v/lint-blame.svg)](https://www.npmjs.com/package/lint-blame)
 [![Downloads](https://img.shields.io/npm/dt/lint-blame.svg)](https://www.npmjs.com/package/lint-blame)
 [![Build Status](https://travis-ci.org/felixfbecker/lint-blame.svg?branch=master)](https://travis-ci.org/felixfbecker/lint-blame)
