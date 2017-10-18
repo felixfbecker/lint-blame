@@ -22,7 +22,7 @@
   "devDependencies": {
     "@sourcegraph/tsconfig": "^1.0.1",
     "@sourcegraph/tslint-config": "^2.0.2",
-    "@types/node": "^8.0.31",
+    "@types/node": "^8.0.45",
     "@types/yargs": "^8.0.2",
     "tslint": "^5.7.0",
     "tslint-language-service": "^0.9.6",
