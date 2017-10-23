@@ -31,6 +31,6 @@
   "dependencies": {
     "rxjs": "^5.4.3",
     "semaphore-async-await": "^1.5.1",
-    "yargs": "^9.0.1"
+    "yargs": "^10.0.3"
   }
 }
