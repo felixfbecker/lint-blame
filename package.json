@@ -21,7 +21,7 @@
   "license": "MIT",
   "devDependencies": {
     "@sourcegraph/tsconfig": "^1.0.1",
-    "@sourcegraph/tslint-config": "^2.0.2",
+    "@sourcegraph/tslint-config": "^7.0.2",
     "@types/node": "^8.0.31",
     "@types/yargs": "^8.0.2",
     "tslint": "^5.7.0",
