@@ -1,4 +1,3 @@
-
 export type ComplaintParser = (line: string) => Complaint
 
 export interface Complaint {
@@ -8,7 +7,6 @@ export interface Complaint {
 }
 
 export namespace parsers {
-
     export const tslint4: ComplaintParser = line => {
         const match = line.match(/^(.+)\[(\d+), (\d+)\]:/)
         if (!match) {
@@ -17,7 +15,7 @@ export namespace parsers {
         return {
             filePath: match[1],
             line: ~~match[2],
-            column: ~~match[3]
+            column: ~~match[3],
         }
     }
 
@@ -29,7 +27,7 @@ export namespace parsers {
         return {
             filePath: match[1],
             line: ~~match[2],
-            column: ~~match[3]
+            column: ~~match[3],
         }
     }
 
@@ -41,7 +39,7 @@ export namespace parsers {
         return {
             filePath: match[1],
             line: ~~match[2],
-            column: ~~match[3]
+            column: ~~match[3],
         }
     }
 }
