@@ -8,16 +8,9 @@
       "program": "${workspaceFolder}/bin",
       "cwd": "/Users/felix/git/sourcegraph/src",
       "console": "integratedTerminal",
-      "args": [
-        "--file",
-        "${workspaceRoot}/tslint.txt",
-        "-f",
-        "tslint4"
-      ],
+      "args": ["--file", "${workspaceRoot}/tslint.txt", "-f", "tslint4"],
       "sourceMaps": true,
-      "outFiles": [
-        "lib/**/*.js"
-      ]
+      "outFiles": ["lib/**/*.js"]
     }
   ],
   "compounds": []

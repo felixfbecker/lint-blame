@@ -1,4 +1,3 @@
-
 import { Observable } from 'rxjs'
 import * as yargs from 'yargs'
 import { parsers } from './complaints'
@@ -22,20 +21,19 @@ const argv = yargs
     .help()
     .option('members', {
         type: 'array',
-        description: 'A list of { email, name } members that rules should apply for'
+        description: 'A list of { email, name } members that rules should apply for',
     })
     .option('format', {
         alias: 'f',
         description: 'The complaint format to parse',
         choices: ['tslint4', 'tslint5', 'tsconfig'],
-        required: true
+        required: true,
     })
     .option('since', {
         type: 'string',
         coerce: since => new Date(since),
-        description: 'A point in time before which rules do not apply'
-    })
-    .argv as Arguments
+        description: 'A point in time before which rules do not apply',
+    }).argv as Arguments
 
 if (!argv.file && process.stdin.isTTY) {
     throw new Error('No input on STDIN')
@@ -46,11 +44,14 @@ const splitBy = (seperator: string) => (source: Observable<string>) =>
     source
         // Make sure we don't miss the last part
         .concat([seperator])
-        .scan(({ buffer }, b) => {
-            const splitted = (buffer + b).split('\n')
-            const rest = splitted.pop()
-            return { buffer: rest, lines: splitted }
-        }, { buffer: '', lines: [] })
+        .scan(
+            ({ buffer }, b) => {
+                const splitted = (buffer + b).split('\n')
+                const rest = splitted.pop()
+                return { buffer: rest, lines: splitted }
+            },
+            { buffer: '', lines: [] }
+        )
         // Each item here is a pair { buffer: string, items: string[] }
         // such that buffer contains the remaining input text that has no newline
         // and items contains the lines that have been produced by the last buffer
@@ -66,7 +67,7 @@ const formatBlame = (blame: CommitInfo | null): string => {
         return 'Not Committed Yet'
     }
     const author = blame.author || 'No Author'
-    const date = blame.authorTime && blame.authorTime.toLocaleString() || 'No Author Date'
+    const date = (blame.authorTime && blame.authorTime.toLocaleString()) || 'No Author Date'
     return `${blame.sha1.slice(0, 7)} ${author} ${date}`
 }
 
@@ -89,11 +90,9 @@ const subscription = Observable.merge(
             .catch(err => [])
             .do(() => totalComplaints++)
             .mergeMap(complaint =>
-                blamer.blameLine(complaint.filePath, complaint.line)
-                    .mergeMap(blame => !blame || checkBlame(blame, argv)
-                        ? [`${formatBlame(blame)} ${line}`]
-                        : []
-                    )
+                blamer
+                    .blameLine(complaint.filePath, complaint.line)
+                    .mergeMap(blame => (!blame || checkBlame(blame, argv) ? [`${formatBlame(blame)} ${line}`] : []))
             )
             .do(() => validComplaints++)
     )
@@ -106,7 +105,10 @@ const subscription = Observable.merge(
             process.exit(2)
         },
         () => {
-            process.stdout.write(`\n${validComplaints} complaints (${totalComplaints} total, ${totalComplaints - validComplaints} ignored)\n`)
+            process.stdout.write(
+                `\n${validComplaints} complaints (${totalComplaints} total, ${totalComplaints -
+                    validComplaints} ignored)\n`
+            )
             process.exit(validComplaints > 0 ? 1 : 0)
         }
     )

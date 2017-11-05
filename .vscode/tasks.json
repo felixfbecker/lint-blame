@@ -5,16 +5,12 @@
       "type": "npm",
       "script": "watch",
       "isBackground": true,
-      "problemMatcher": [
-        "$tsc-watch"
-      ]
+      "problemMatcher": ["$tsc-watch"]
     },
     {
       "type": "npm",
       "script": "build",
-      "problemMatcher": [
-        "$tsc"
-      ]
+      "problemMatcher": ["$tsc"]
     }
   ]
 }

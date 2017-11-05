@@ -15,15 +15,19 @@
   "scripts": {
     "build": "tsc -p .",
     "watch": "tsc -p . -w",
-    "lint": "tslint -c tslint.json -p ."
+    "lint": "npm run tslint && npm run prettier",
+    "tslint": "tslint -c tslint.json -p .",
+    "prettier": "prettier --list-different --write '**/*.{js?(on),ts}'"
   },
   "author": "Felix Becker <felix.b@outlook.com>",
   "license": "MIT",
   "devDependencies": {
+    "@sourcegraph/prettierrc": "^1.1.0",
     "@sourcegraph/tsconfig": "^1.0.1",
     "@sourcegraph/tslint-config": "^7.0.2",
     "@types/node": "^8.0.31",
     "@types/yargs": "^8.0.2",
+    "prettier": "^1.7.4",
     "tslint": "^5.7.0",
     "tslint-language-service": "^0.9.6",
     "typescript": "^2.5.2"

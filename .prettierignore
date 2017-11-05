@@ -1,0 +1,4 @@
+# Ignore generated files
+package-lock.json
+package.json
+lib/

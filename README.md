@@ -1,12 +1,13 @@
 
 # lint-blame
 
-[![Version](https://img.shields.io/npm/v/lint-blame.svg)](https://www.npmjs.com/package/lint-blame)
-[![Downloads](https://img.shields.io/npm/dt/lint-blame.svg)](https://www.npmjs.com/package/lint-blame)
-[![Build Status](https://travis-ci.org/felixfbecker/lint-blame.svg?branch=master)](https://travis-ci.org/felixfbecker/lint-blame)
-[![Dependency Status](https://david-dm.org/felixfbecker/lint-blame/status.svg)](https://david-dm.org/felixfbecker/lint-blame)
-![Node Version](https://img.shields.io/node/v/lint-blame.svg)
-[![License](https://img.shields.io/npm/l/lint-blame.svg)](https://github.com/felixfbecker/lint-blame/blob/master/LICENSE.txt)
+[![npm](https://img.shields.io/npm/v/lint-blame.svg)](https://www.npmjs.com/package/lint-blame)
+[![downloads](https://img.shields.io/npm/dt/lint-blame.svg)](https://www.npmjs.com/package/lint-blame)
+[![build](https://travis-ci.org/felixfbecker/lint-blame.svg?branch=master)](https://travis-ci.org/felixfbecker/lint-blame)
+[![dependencies](https://david-dm.org/felixfbecker/lint-blame/status.svg)](https://david-dm.org/felixfbecker/lint-blame)
+![node](https://img.shields.io/node/v/lint-blame.svg)
+[![code style: prettier](https://img.shields.io/badge/code_style-prettier-ff69b4.svg)](https://github.com/prettier/prettier)
+[![license](https://img.shields.io/npm/l/lint-blame.svg)](https://github.com/felixfbecker/lint-blame/blob/master/LICENSE.txt)
 
 Filters the output of your linter by blaming the lines it complains about.
 Allows you to gradually add stricter lint rules to new code only without updating your whole codebase at once.
