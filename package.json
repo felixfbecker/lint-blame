@@ -24,7 +24,7 @@
   "devDependencies": {
     "@sourcegraph/prettierrc": "^1.1.0",
     "@sourcegraph/tsconfig": "^1.0.1",
-    "@sourcegraph/tslint-config": "^7.0.2",
+    "@sourcegraph/tslint-config": "^8.0.0",
     "@types/node": "^8.0.31",
     "@types/yargs": "^8.0.2",
     "prettier": "^1.7.4",
