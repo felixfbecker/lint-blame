@@ -71,7 +71,12 @@ let validComplaints = 0
 
 const abortController = new AbortController()
 
-process.on('SIGTERM', () => abortController.abort())
+for (const signal of ['SIGTERM', 'SIGINT'] as NodeJS.Signals[]) {
+    process.on(signal, () => {
+        abortController.abort()
+        process.exit()
+    })
+}
 process.on('exit', () => abortController.abort())
 
 const spinner = ora('waiting for input on STDIN').start()
