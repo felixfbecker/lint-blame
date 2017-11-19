@@ -1,6 +1,9 @@
-import { Observable } from 'rxjs'
+import { AbortController } from 'abort-controller'
+import chalk from 'chalk'
+import ora = require('ora')
+import split = require('split')
 import * as yargs from 'yargs'
-import { parsers } from './complaints'
+import { Complaint, parsers } from './complaints'
 import { Blamer, CommitInfo } from './git'
 import { checkBlame, Member } from './lint-blame'
 
@@ -39,24 +42,6 @@ if (!argv.file && process.stdin.isTTY) {
     throw new Error('No input on STDIN')
 }
 
-// TODO publish this to npm as an rxjs operator, I have wanted this a few times!
-const splitBy = (seperator: string) => (source: Observable<string>) =>
-    source
-        // Make sure we don't miss the last part
-        .concat([seperator])
-        .scan(
-            ({ buffer }, b) => {
-                const splitted = (buffer + b).split('\n')
-                const rest = splitted.pop()
-                return { buffer: rest, lines: splitted }
-            },
-            { buffer: '', lines: [] }
-        )
-        // Each item here is a pair { buffer: string, items: string[] }
-        // such that buffer contains the remaining input text that has no newline
-        // and items contains the lines that have been produced by the last buffer
-        .concatMap(({ lines }) => lines)
-
 const parseComplaint = parsers[argv.format]
 if (!parseComplaint) {
     throw new Error(`Unknown complaint format: ${argv.format}`)
@@ -64,58 +49,68 @@ if (!parseComplaint) {
 
 const formatBlame = (blame: CommitInfo | null): string => {
     if (!blame) {
-        return 'Not Committed Yet'
+        return chalk.red('Not Committed Yet')
     }
     const author = blame.author || 'No Author'
     const date = (blame.authorTime && blame.authorTime.toLocaleString()) || 'No Author Date'
-    return `${blame.sha1.slice(0, 7)} ${author} ${date}`
+    return `${chalk.yellow(blame.sha1.slice(0, 7))} ${chalk.cyan(author)} ${chalk.magenta(date)}`
 }
 
-const blamer = new Blamer(50)
+process.on('uncaughtException', err => {
+    throw err
+})
+process.on('unhandledRejection', err => {
+    throw err
+})
+
+const blamer = new Blamer(20)
 
 let totalComplaints = 0
 let validComplaints = 0
 
-// Read lines from STDIN
-const subscription = Observable.merge(
-    Observable.fromEvent<Buffer>(process.stdin, 'data'),
-    Observable.fromEvent<any>(process.stdin, 'error').mergeMap(err => Observable.throw(err))
-)
-    .takeUntil(Observable.fromEvent<void>(process.stdin, 'end'))
-    .map(buffer => buffer.toString())
-    .let(splitBy('\n'))
-    .mergeMap(line =>
-        Observable.defer(() => Observable.of(parseComplaint(line)))
-            // Ignore lines that are not complaints (e.g. warnings)
-            .catch(err => [])
-            .do(() => totalComplaints++)
-            .mergeMap(complaint =>
-                blamer
-                    .blameLine(complaint.filePath, complaint.line)
-                    .mergeMap(blame => (!blame || checkBlame(blame, argv) ? [`${formatBlame(blame)} ${line}`] : []))
-            )
-            .do(() => validComplaints++)
-    )
-    .subscribe(
-        line => {
-            process.stdout.write(line + '\n')
-        },
-        err => {
-            console.error(err.stack)
-            process.exit(2)
-        },
-        () => {
-            process.stdout.write(
-                `\n${validComplaints} complaints (${totalComplaints} total, ${totalComplaints -
-                    validComplaints} ignored)\n`
-            )
-            process.exit(validComplaints > 0 ? 1 : 0)
-        }
-    )
+const abortController = new AbortController()
 
-process.on('SIGTERM', () => subscription.unsubscribe())
-process.on('exit', () => subscription.unsubscribe())
-process.on('uncaughtException', err => {
-    subscription.unsubscribe()
-    throw err
+process.on('SIGTERM', () => abortController.abort())
+process.on('exit', () => abortController.abort())
+
+const spinner = ora('waiting for input on STDIN').start()
+
+// Read lines from STDIN
+const lineStream = process.stdin.pipe(split())
+const promises: Promise<void>[] = []
+lineStream.on('data', (line: string) => {
+    promises.push(
+        (async () => {
+            line = line.trim()
+            spinner.text = line
+            if (!line) {
+                return
+            }
+            let complaint: Complaint
+            try {
+                complaint = parseComplaint(line + '')
+            } catch {
+                return
+            }
+            totalComplaints++
+            const blame = await blamer.blameLine(complaint.filePath, complaint.line, abortController.signal)
+            if (!blame || !checkBlame(blame, argv)) {
+                // Ignore complaint
+                return
+            }
+            spinner.stop()
+            process.stdout.write(`${formatBlame(blame)} ${line}\n`)
+            spinner.start()
+            validComplaints++
+            process.exitCode = 1
+        })()
+    )
+})
+
+lineStream.on('end', async () => {
+    await Promise.all(promises)
+    spinner.stop()
+    process.stdout.write(
+        `\n${validComplaints} complaints (${totalComplaints} total, ${totalComplaints - validComplaints} ignored)\n`
+    )
 })

@@ -1,5 +1,5 @@
-import { spawn } from 'child_process'
-import { Observable } from 'rxjs'
+import { AbortController, AbortSignal } from 'abort-controller'
+import { execFile, spawn } from 'child_process'
 import Semaphore from 'semaphore-async-await'
 
 export interface CommitInfo {
@@ -132,76 +132,64 @@ export class Blamer {
     private concurrencyLimit: Semaphore
 
     /** Map from absolute file path to pending blame result */
-    private blames = new Map<string, Observable<BlamedLines | null>>()
+    private blames = new Map<string, Promise<BlamedLines | null>>()
 
     constructor(concurrencyLimit: number) {
         this.concurrencyLimit = new Semaphore(concurrencyLimit)
     }
 
-    public blameLine(file: string, line: number): Observable<CommitInfo | null> {
-        return this.memoizedBlameFile(file).mergeMap(blames => {
-            const blame = blames && blames[line]
-            if (!blame) {
-                // Linters can report an error on the line that contains EOL, but git blame can't blame it
-                return []
-            }
-            return [blame.commit]
-        })
+    public async blameLine(
+        file: string,
+        line: number,
+        signal: AbortSignal = new AbortController().signal
+    ): Promise<CommitInfo | null> {
+        const blames = await this.memoizedBlameFile(file, signal)
+        // Linters can report an error on the line that contains EOL, but git blame can't blame it
+        const blame = blames && blames[line]
+        return blame && blame.commit
     }
 
-    private memoizedBlameFile(file: string): Observable<BlamedLines | null> {
-        let observable = this.blames.get(file)
-        if (!observable) {
-            observable = this.blameFile(file)
-                .publishReplay()
-                .refCount()
-            this.blames.set(file, observable)
+    private memoizedBlameFile(
+        file: string,
+        signal: AbortSignal = new AbortController().signal
+    ): Promise<BlamedLines | null> {
+        let promise = this.blames.get(file)
+        if (!promise) {
+            promise = this.blameFile(file, signal)
+            this.blames.set(file, promise)
         }
-        return observable
+        return promise
     }
 
-    private blameFile(file: string): Observable<BlamedLines | null> {
-        return Observable.defer(() => this.concurrencyLimit.wait())
-            .mergeMap(
-                () =>
-                    new Observable<Buffer>(observer => {
-                        let stderr = ''
-                        const child = spawn('git', ['blame', '--porcelain', file])
-                        child.on('error', err => observer.error(err))
-                        child.on('close', (exitCode: number) => {
-                            this.concurrencyLimit.signal()
-                            if (!exitCode) {
-                                observer.complete()
-                            } else {
-                                observer.error(
-                                    Object.assign(new Error(`git blame ${file} exited with ${exitCode} ${stderr}`), {
-                                        exitCode,
-                                        stderr,
-                                    })
-                                )
-                            }
-                        })
-                        if (child.stdout) {
-                            child.stdout.on('data', (chunk: Buffer) => observer.next(chunk))
-                        }
-                        if (child.stderr) {
-                            child.stderr.on('data', (chunk: Buffer) => (stderr += chunk))
-                        }
-                        return () => child.kill()
-                    })
-            )
-            .reduce((buffer, chunk) => buffer + chunk, '')
-            .map(output => {
-                const blameParser = new BlameParser()
-                blameParser.parse(output)
-                return blameParser.lineData
+    private async blameFile(
+        file: string,
+        signal: AbortSignal = new AbortController().signal
+    ): Promise<BlamedLines | null> {
+        await this.concurrencyLimit.wait()
+        let stdout: string
+        try {
+            stdout = await new Promise<string>((resolve, reject) => {
+                const child = execFile(
+                    'git',
+                    ['blame', '--porcelain', file],
+                    { encoding: 'utf-8', maxBuffer: Infinity },
+                    (err: any, stdout: string) => (err ? reject(err) : resolve(stdout))
+                )
+                signal.addEventListener('abort', () => {
+                    child.kill()
+                    reject(Object.assign(new Error('Aborted'), { name: 'AbortError' }))
+                })
             })
-            .catch(err => {
-                // If the path is not known to git, the file is not committed yet
-                if (err.stderr && err.stderr.includes('no such path')) {
-                    return [null]
-                }
-                throw err
-            })
+        } catch (err) {
+            // If the path is not known to git, the file is not committed yet
+            if (err.stderr && err.stderr.includes('no such path')) {
+                return null
+            }
+            throw err
+        }
+        this.concurrencyLimit.signal()
+        const blameParser = new BlameParser()
+        blameParser.parse(stdout)
+        return blameParser.lineData
     }
 }

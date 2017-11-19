@@ -11,6 +11,11 @@
       "type": "npm",
       "script": "build",
       "problemMatcher": ["$tsc"]
+    },
+    {
+      "type": "npm",
+      "script": "tslint",
+      "problemMatcher": ["$tslint5"]
     }
   ]
 }
