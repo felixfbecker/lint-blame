@@ -22,8 +22,8 @@
   "author": "Felix Becker <felix.b@outlook.com>",
   "license": "MIT",
   "devDependencies": {
-    "@sourcegraph/prettierrc": "^1.1.0",
-    "@sourcegraph/tsconfig": "^1.0.1",
+    "@sourcegraph/prettierrc": "^2.0.0",
+    "@sourcegraph/tsconfig": "^2.0.0",
     "@sourcegraph/tslint-config": "^8.0.0",
     "@types/lodash": "^4.14.85",
     "@types/node": "^8.0.31",
@@ -34,7 +34,7 @@
     "source-map-support": "^0.5.0",
     "tslint": "^5.8.0",
     "tslint-language-service": "^0.9.6",
-    "typescript": "^2.5.2"
+    "typescript": "^2.6.1"
   },
   "dependencies": {
     "abort-controller": "^1.0.0",

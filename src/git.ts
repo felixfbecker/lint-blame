@@ -1,5 +1,5 @@
 import { AbortController, AbortSignal } from 'abort-controller'
-import { execFile, spawn } from 'child_process'
+import { execFile } from 'child_process'
 import Semaphore from 'semaphore-async-await'
 
 export interface CommitInfo {
@@ -172,7 +172,7 @@ export class Blamer {
                 const child = execFile(
                     'git',
                     ['blame', '--porcelain', file],
-                    { encoding: 'utf-8', maxBuffer: Infinity },
+                    { encoding: 'utf8', maxBuffer: Infinity },
                     (err: any, stdout: string) => (err ? reject(err) : resolve(stdout))
                 )
                 signal.addEventListener('abort', () => {
