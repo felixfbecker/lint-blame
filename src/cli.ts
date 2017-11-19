@@ -1,6 +1,7 @@
 import { AbortController } from 'abort-controller'
 import chalk from 'chalk'
 import ora = require('ora')
+import * as os from 'os'
 import split = require('split')
 import * as yargs from 'yargs'
 import { Complaint, parsers } from './complaints'
@@ -63,7 +64,7 @@ process.on('unhandledRejection', err => {
     throw err
 })
 
-const blamer = new Blamer(20)
+const blamer = new Blamer(os.cpus().length)
 
 let totalComplaints = 0
 let validComplaints = 0
