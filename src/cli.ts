@@ -100,6 +100,7 @@ lineStream.on('data', (line: string) => {
                 return
             }
             spinner.stop()
+            spinner.clear()
             process.stdout.write(`${formatBlame(blame)} ${line}\n`)
             spinner.start()
             validComplaints++
