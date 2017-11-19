@@ -5,7 +5,7 @@ import * as os from 'os'
 import split = require('split')
 import * as yargs from 'yargs'
 import { Complaint, parsers } from './complaints'
-import { Blamer, CommitInfo } from './git'
+import { Blamer, CommitInfo, EUNKNOWNLINE } from './git'
 import { checkBlame, Member } from './lint-blame'
 
 interface Arguments extends yargs.Arguments {
@@ -92,24 +92,31 @@ lineStream.on('data', (line: string) => {
             if (!line) {
                 return
             }
-            let complaint: Complaint
+            let complaint: Complaint | undefined
             try {
                 complaint = parseComplaint(line + '')
-            } catch {
-                return
+                if (!complaint) {
+                    return
+                }
+                totalComplaints++
+                const blame = await blamer.blameLine(complaint.filePath, complaint.line, abortController.signal)
+                // If the line is committed and does not match our filters, ignore it
+                if (blame && !checkBlame(blame, argv)) {
+                    return
+                }
+                spinner.stop()
+                spinner.clear()
+                process.stdout.write(`${formatBlame(blame)} ${line}\n`)
+                spinner.start()
+                validComplaints++
+                process.exitCode = 1
+            } catch (err) {
+                // Linters can report an error on the line that contains EOL, but git blame can't blame it
+                if (err.code === EUNKNOWNLINE) {
+                    return
+                }
+                throw err
             }
-            totalComplaints++
-            const blame = await blamer.blameLine(complaint.filePath, complaint.line, abortController.signal)
-            if (!blame || !checkBlame(blame, argv)) {
-                // Ignore complaint
-                return
-            }
-            spinner.stop()
-            spinner.clear()
-            process.stdout.write(`${formatBlame(blame)} ${line}\n`)
-            spinner.start()
-            validComplaints++
-            process.exitCode = 1
         })()
     )
 })

@@ -128,6 +128,11 @@ class BlameParser {
     }
 }
 
+/**
+ * Error code when blaming a line that contains EOL that t git blame can't blame
+ */
+export const EUNKNOWNLINE = 'EUNKNOWNLINE'
+
 export class Blamer {
     private concurrencyLimit: Semaphore
 
@@ -146,7 +151,10 @@ export class Blamer {
         const blames = await this.memoizedBlameFile(file, signal)
         // Linters can report an error on the line that contains EOL, but git blame can't blame it
         const blame = blames && blames[line]
-        return blame && blame.commit
+        if (!blame) {
+            throw Object.assign(new Error(`Unknown line ${line} in file ${file}`), { code: EUNKNOWNLINE })
+        }
+        return blame.commit
     }
 
     private memoizedBlameFile(
@@ -186,8 +194,9 @@ export class Blamer {
                 return null
             }
             throw err
+        } finally {
+            this.concurrencyLimit.signal()
         }
-        this.concurrencyLimit.signal()
         const blameParser = new BlameParser()
         blameParser.parse(stdout)
         return blameParser.lineData
