@@ -23,7 +23,7 @@
   "license": "MIT",
   "devDependencies": {
     "@sourcegraph/prettierrc": "^2.0.0",
-    "@sourcegraph/tsconfig": "^2.0.0",
+    "@sourcegraph/tsconfig": "^3.0.0",
     "@sourcegraph/tslint-config": "^8.0.0",
     "@types/lodash": "^4.14.85",
     "@types/node": "^8.0.31",
